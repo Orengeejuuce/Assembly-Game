@@ -1,0 +1,1443 @@
+00001000 Starting Address
+Assembler used: EASy68K Editor/Assembler v5.16.01
+Created On: 6/11/2024 4:44:33 PM
+
+00000000                             1  *-----------------------------------------------------------
+00000000                             2  * Title      : Trash Sort
+00000000                             3  * Written by : Haley Park
+00000000                             4  * Date       :
+00000000                             5  * Description: A game where the player must sort as much recycling and trash before the time runs out
+00000000                             6  *-----------------------------------------------------------
+00000000  =0000000F                  7  DISPLAY_SCORE           EQU     15
+00000000  =0000005F                  8  PRINT_STRING            EQU     95
+00000000  =00000011                  9  DOUBLE_BUFFERED_MODE    EQU     17
+00000000  =0000005E                 10  REPAINT_SCREEN_COMMAND  equ     94
+00000000  =0000000B                 11  CLEAR_SCREEN_COMMAND    equ     11
+00000000  =0000FF00                 12  CLEAR_SCREEN_MAGIC_VAL  equ     $FF00
+00000000  =0000005C                 13  DRAWING_MODE_COMMAND    equ     92
+00000000                            14  
+00000000  =0000005F                 15  DISPLAY_STRING          EQU     95
+00000000                            16  
+00000000  =00000005                 17  ENTER_GAMELOOP_INPUT    EQU     5
+00000000                            18  
+00000000  =00000050                 19  PEN_COLOR_COMMAND       EQU     80
+00000000  =00000051                 20  FILL_COLOR_COMMAND      EQU     81
+00000000  =009C6258                 21  BACKGROUND_COLOR        EQU     $009C6258
+00000000  =00000059                 22  FLOOD_FILL_COMMAND      EQU     89
+00000000  =00000057                 23  DRAW_RECTANGLE          EQU     87
+00000000                            24  
+00000000  =00000008                 25  GET_TIME_COMMAND        EQU     8
+00000000                            26  
+00000000  =00000001                 27  RECYCLE_BIN             EQU     1    
+00000000  =00000003                 28  TRASH_BIN               EQU     3  
+00000000  =00000002                 29  KEEP_BIN                EQU     2 
+00000000                            30  
+00001000                            31      ORG    $1000
+00001000                            32  START:                  ; first instruction of program
+00001000                            33  **********************************************************************
+00001000                            34  * Initialization
+00001000                            35  **********************************************************************
+00001000                            36  MainInitialize
+00001000                            37          
+00001000  23FC 00000000 002E4062    38          move.l      #0,score
+0000100A  4EB9 0000155C             39          jsr         setScreenResolution  
+00001010                            40          
+00001010  4EB9 000011F2             41          jsr         FillBackground
+00001016                            42          
+00001016  4EB9 002E3D3A             43          jsr         DisplayEnterScreen
+0000101C                            44          
+0000101C                            45          *set double buffered mode                   
+0000101C  103C 005C                 46          move.b      #DRAWING_MODE_COMMAND,d0
+00001020  123C 0011                 47          move.b      #DOUBLE_BUFFERED_MODE,d1
+00001024  4E4F                      48          trap            #15     
+00001026                            49          
+00001026                            50  WaitForEnter
+00001026  4EB9 00001316             51          jsr         RestartScreen
+0000102C  4EB9 000011F2             52          jsr         FillBackground
+00001032  4EB9 002E3D12             53          jsr         DisplayLoadingScreen
+00001038                            54          
+00001038  7005                      55          move.l      #ENTER_GAMELOOP_INPUT,d0
+0000103A  4E4F                      56          trap        #15
+0000103C                            57          
+0000103C  0C01 000D                 58          cmpi.b      #$0D,d1
+00001040  6700 0004                 59          beq         GameLoopInitialize
+00001044                            60          
+00001044  60E0                      61          bra         WaitForEnter
+00001046                            62          
+00001046                            63  GameLoopInitialize
+00001046  4EB9 00001274             64           jsr         SwapBuffers
+0000104C  4EB9 002E3D62             65           jsr         DisplayBackground 
+00001052  4EB9 00001274             66           jsr         SwapBuffers  
+00001058                            67           ;jsr         GetTime
+00001058                            68          
+00001058                            69  **********************************************************************
+00001058                            70  * GameLoop
+00001058                            71  ********************************************************************** 
+00001058                            72  GameLoop
+00001058  23F9 002E403A 002E4042    73          move.l  randomObjPosX,invalPosX
+00001062  23F9 002E403E 002E4046    74          move.l  randomObjPosY,invalPosY
+0000106C                            75          
+0000106C                            76          
+0000106C  23FC 00000050 002E4052    77          move.l  #80,velocity 
+00001076                            78          
+00001076  0CB9 00000000 002E4076    79          cmpi.l  #0,objIsMoving
+00001080  6700 0084                 80          beq     InputObjMovement
+00001084                            81          
+00001084  0CB9 00000000 002E4072    82          cmpi.l  #0,objDropped
+0000108E  6700 0010                 83          beq     Input
+00001092                            84          
+00001092                            85          * if obj is not at the center yet, keep updating its position and render it until it is
+00001092  0CB9 000000B4 002E403E    86          cmpi.l  #180,randomObjPosY
+0000109C  6D00 0032                 87          blt     Update
+000010A0                            88  Input
+000010A0                            89          * record curr frame value for comparison in next frame
+000010A0  45F9 002E4026             90          lea         lastFrameKeyDown,a2
+000010A6  24B9 002E402A             91          move.l      currentFrameKeyDown,(a2)
+000010AC                            92      
+000010AC  23FC 00000000 002E4072    93          move.l  #0,objDropped
+000010B6  23FC 00000001 002E402A    94          move.l  #1,currentFrameKeyDown
+000010C0                            95          
+000010C0  4EB9 00001280             96          jsr     InitData
+000010C6  4EB9 00001286             97          jsr     CheckInput
+000010CC  6000 001A                 98          bra     ObjDropComplete
+000010D0                            99      
+000010D0                           100  Update 
+000010D0                           101          * checks to see if obj has finished dropping
+000010D0  0CB9 00000000 002E4072   102          cmpi.l      #0,objDropped
+000010DA  6700 000C                103          beq         objDropComplete
+000010DE                           104          
+000010DE                           105          ;jsr         FindTimeBasedMovement ; finds time-based velocity
+000010DE                           106          
+000010DE  4EB9 0000120A            107          jsr         RandomObjDrop         ; updates position of  random obj dropped
+000010E4  6000 006C                108          bra         Render
+000010E8                           109      
+000010E8                           110  ObjDropComplete
+000010E8                           111          
+000010E8                           112          * if there is an input, check to see if the previous frame also has input
+000010E8                           113          * otherwise, do not update and render
+000010E8  0CB9 00000000 002E402A   114          cmpi.l      #0,currentFrameKeyDown
+000010F2  6600 FF64                115          bne         GameLoop
+000010F6                           116          
+000010F6                           117          * compare the two frames: if last frame was not pressed, then process input
+000010F6  2039 002E4026            118          move.l      lastFrameKeyDown,d0
+000010FC  0C80 00000001            119          cmpi.l      #1,d0
+00001102  6600 FF54                120          bne         GameLoop
+00001106                           121  *----------- KEY UP ----------------------------------
+00001106                           122  InputObjMovement
+00001106  4EB9 00001360            123          jsr         ObjMovement ; updates obj position based on player input
+0000110C                           124          
+0000110C                           125          * checks to see if object has finished moving
+0000110C  0CB9 00000000 002E4076   126          cmpi.l      #0,objIsMoving
+00001116  6700 003A                127          beq         Render
+0000111A                           128          * ------- obj is done moving ----------------
+0000111A                           129          
+0000111A  4EB9 00001454            130          jsr         CheckObjSorted ; checks obj to update score
+00001120  4EB9 00001254            131          jsr         CalcScore
+00001126                           132          
+00001126                           133          * generate next random obj
+00001126  4EB9 002E3C2C            134          jsr     RandomObjGenerator
+0000112C  47F9 002E407A            135          lea     randomObjToSort,a3
+00001132  2687                     136          move.l  d7,(a3)
+00001134                           137  
+00001134                           138          
+00001134                           139          * reset drop obj
+00001134  23FC 00000001 002E4072   140          move.l      #1,objDropped
+0000113E                           141          
+0000113E                           142          * reset obj position
+0000113E  23FC 00000118 002E403A   143          move.l      #280,randomObjPosX
+00001148  23FC FFFFFFCE 002E403E   144          move.l      #-50,randomObjPosY
+00001152                           145          
+00001152                           146          
+00001152                           147  Render  
+00001152                           148          
+00001152  4EB9 00001316            149          jsr         RestartScreen
+00001158                           150          
+00001158  4EB9 000011F2            151          jsr         FillBackground
+0000115E                           152          
+0000115E                           153          
+0000115E                           154  
+0000115E  4EB9 000011BA            155          jsr         DisplayBinLabels
+00001164                           156          
+00001164  4EB9 0000122E            157          jsr         DisplayScore
+0000116A                           158          
+0000116A  4EB9 00001180            159          jsr         ObjInval
+00001170                           160          
+00001170  4EB9 002E3C4A            161          jsr         DisplayRandomObj
+00001176                           162       
+00001176  4EB9 00001274            163          jsr         SwapBuffers     
+0000117C                           164          
+0000117C  6000 FEDA                165          bra         GameLoop
+00001180                           166  
+00001180                           167  
+00001180                           168  **********************************************************************
+00001180                           169  * Subroutines
+00001180                           170  **********************************************************************
+00001180                           171  
+00001180                           172          
+00001180                           173  ObjInval
+00001180  7050                     174          move.l      #PEN_COLOR_COMMAND,d0
+00001182  223C 009C6258            175          move.l      #$009C6258,d1
+00001188  4E4F                     176          trap        #15
+0000118A                           177          
+0000118A  7051                     178          move.l      #FILL_COLOR_COMMAND,d0
+0000118C  4E4F                     179          trap        #15
+0000118E                           180          
+0000118E  4281                     181          clr.l       d1
+00001190                           182  
+00001190  7057                     183          move.l      #DRAW_RECTANGLE,d0
+00001192  2239 002E4042            184          move.l      invalPosX,d1
+00001198  2439 002E4046            185          move.l      invalPosY,d2
+0000119E  2639 002E4042            186          move.l      invalPosX,d3
+000011A4  D6B9 002E404E            187          add.l       invalWidth,d3
+000011AA  2839 002E4046            188          move.l      invalPosY,d4
+000011B0  D8B9 002E404A            189          add.l       invalHeight,d4
+000011B6  4E4F                     190          trap        #15
+000011B8  4E75                     191          rts
+000011BA                           192          
+000011BA                           193  DisplayBinLabels
+000011BA                           194  *recycle bin label
+000011BA  705F                     195          move.l      #DISPLAY_STRING,d0
+000011BC  323C 000A                196          move.w      #10,d1
+000011C0  343C 008C                197          move.w      #140,d2
+000011C4  43F9 002E4084            198          lea         recycleString,a1
+000011CA  4E4F                     199          trap        #15
+000011CC                           200          
+000011CC                           201  *trash bin label
+000011CC  705F                     202          move.l      #DISPLAY_STRING,d0
+000011CE  323C 024E                203          move.w      #590,d1
+000011D2  343C 008C                204          move.w      #140,d2
+000011D6  43F9 002E4092            205          lea         trashString,a1
+000011DC  4E4F                     206          trap        #15
+000011DE                           207          
+000011DE                           208  *keep bin label
+000011DE  705F                     209          move.l      #DISPLAY_STRING,d0
+000011E0  323C 013B                210          move.w      #315,d1
+000011E4  343C 01C2                211          move.w      #450,d2
+000011E8  43F9 002E409E            212          lea         keepString,a1
+000011EE  4E4F                     213          trap        #15
+000011F0                           214          
+000011F0  4E75                     215          rts
+000011F2                           216                   
+000011F2                           217   
+000011F2                           218  ********** TIME-BASED MOVEMENT ****************************
+000011F2                           219  *FindTimeBasedMovement
+000011F2                           220  *        move.l      currentFrameTime,lastFrameTime
+000011F2                           221  *        jsr         GetTime
+000011F2                           222  *        jsr         CalcDeltaTime
+000011F2                           223  *        jsr         CalcVelocity 
+000011F2                           224  *        rts
+000011F2                           225  *        
+000011F2                           226  *GetTime
+000011F2                           227  *        move.l      #GET_TIME_COMMAND,d0
+000011F2                           228  *        trap        #15
+000011F2                           229  *        
+000011F2                           230  *        move.l      d1,currentFrameTime
+000011F2                           231  *        rts
+000011F2                           232  *        
+000011F2                           233  *CalcDeltaTime
+000011F2                           234  *        move.l       currentFrameTime,d0
+000011F2                           235  *        sub.l        lastFrameTime,d0
+000011F2                           236  *        move.w       d0,deltaTime
+000011F2                           237  *        rts
+000011F2                           238  *
+000011F2                           239  ** calc for time-based movement       
+000011F2                           240  *CalcVelocity
+000011F2                           241  *        move.l      velocity,d0
+000011F2                           242  *        mulu.w      deltaTime,d0
+000011F2                           243  *        move.l      d0,velocity
+000011F2                           244  *        rts
+000011F2                           245  ************************************************************       
+000011F2                           246  FillBackground
+000011F2  7051                     247          move.l      #FILL_COLOR_COMMAND,d0
+000011F4  223C 009C6258            248          move.l      #BACKGROUND_COLOR,d1
+000011FA  4E4F                     249          trap        #15
+000011FC                           250          
+000011FC  7059                     251          move.l      #FLOOD_FILL_COMMAND,d0
+000011FE  323C 0000                252          move.w      #0,d1
+00001202  343C 0000                253          move.w      #0,d2
+00001206  4E4F                     254          trap        #15
+00001208  4E75                     255          rts
+0000120A                           256  
+0000120A                           257  RandomObjDrop
+0000120A                           258          * change in position
+0000120A                           259          
+0000120A  2039 002E403E            260          move.l      randomObjPosY,d0
+00001210  D0B9 002E4052            261          add.l       velocity,d0
+00001216  23C0 002E403E            262          move.l      d0,randomObjPosY
+0000121C  4E75                     263          rts
+0000121E                           264          
+0000121E                           265          
+0000121E                           266       
+0000121E                           267  * Testing Purposes      
+0000121E                           268  DisplayRandomNum
+0000121E                           269          * returns random value through d7
+0000121E  700F                     270          move.l      #DISPLAY_SCORE,d0
+00001220  2239 002E407A            271          move.l      randomObjToSort,d1
+00001226  143C 000A                272          move.b      #10,d2
+0000122A  4E4F                     273          trap        #15   
+0000122C  4E75                     274          rts
+0000122E                           275          
+0000122E                           276          
+0000122E                           277  DisplayScore
+0000122E  23F9 002E4062 002E4066   278          move.l      score,numberToDisplay
+00001238  23FC 0000009F 002E406A   279          move.l      #159,centerX
+00001242  23FC 00000046 002E406E   280          move.l      #70,centerY
+0000124C  4EB9 002E3D7E            281          jsr         sevenSegDisplay   
+00001252  4E75                     282          rts   
+00001254                           283          
+00001254                           284  CalcScore
+00001254                           285          * adding to score
+00001254  4280                     286          clr.l       d0
+00001256  2039 002E4062            287          move.l      score,d0
+0000125C  D0B9 002E407E            288          add.l       pointsToAdd,d0
+00001262  23C0 002E4062            289          move.l       d0,score
+00001268  23FC 00000000 002E407E   290          move.l      #0,pointsToAdd
+00001272  4E75                     291          rts
+00001274                           292          
+00001274                           293  SwapBuffers
+00001274  103C 005E                294          move.b  #REPAINT_SCREEN_COMMAND,d0
+00001278  4E4F                     295          trap    #15
+0000127A  4E75                     296          rts             
+0000127C                           297          
+0000127C  FFFF FFFF                298      SIMHALT             ; halt simulator        
+00001280                           299  * Put program code here
+00001280                           300  
+00001280                           301  
+00001280                           302      INCLUDE             "Movement.X68"
+00001280                           303  
+00001280                           304  ALL_REG                 REG     D0-D5/A0-A6
+00001280  =00000041                305  KEY_LEFT_INPUT          equ     $41
+00001280  =00000044                306  KEY_RIGHT_INPUT         EQU     $44
+00001280  =00000053                307  KEY_DOWN_INPUT          EQU     $53
+00001280  =00000013                308  GET_KEY_INPUT_COMMAND   EQU     19
+00001280  =0000000B                309  CLEAR_SCREEN            EQU     11
+00001280  =0000FF00                310  CLEAR_SCREEN_MAGIC_VAL  EQU     $FF00
+00001280  =00000057                311  DRAW_RECTANGLE          EQU     87
+00001280  =00000021                312  GET_SCREEN_SIZE         EQU     33
+00001280  =00000051                313  FILL_COLOR              EQU     81
+00001280  =00000050                314  PEN_COLOR               EQU     80
+00001280  =00000056                315  MOVE_OBJECT_POSITION    EQU     86 
+00001280                           316  
+00001280                           317  InitData
+00001280  4287                     318          clr.l   d7
+00001282  7441                     319          move.l  #$41,d2
+00001284  4E75                     320          rts
+00001286                           321  CheckInput  
+00001286  103C 0013                322          move.b  #GET_KEY_INPUT_COMMAND,d0
+0000128A  2202                     323          move.l  d2,d1
+0000128C  4E4F                     324          TRAP    #15
+0000128E  0C01 0000                325          cmpi.b  #0,d1
+00001292  6700 0048                326          beq     noInput
+00001296                           327  
+00001296  4EB9 0000129C            328          jsr     callFunction
+0000129C                           329  
+0000129C                           330  CallFunction
+0000129C                           331  
+0000129C  48E7 FCFE                332          movem.l ALL_REG,-(sp)
+000012A0  41F9 00001404            333          lea     FunctionTable,a0
+000012A6  0482 00000041            334          sub.l   #$41,d2
+000012AC  E58A                     335          lsl.l   #2,d2
+000012AE  2230 2000                336          move.l  (a0,d2),d1
+000012B2  0C81 00000000            337          cmpi.l  #0,d1
+000012B8  6700 0020                338          beq     noFuncPtr
+000012BC                           339          
+000012BC  23FC 00000000 002E402A   340          move.l  #0,currentFrameKeyDown
+000012C6  23FC 00000000 002E4076   341          move.l  #0,objIsMoving
+000012D0  2241                     342          move.l  d1,a1
+000012D2  4E91                     343          jsr     (a1)  
+000012D4  4CDF 7F3F                344          movem.l (sp)+,ALL_REG
+000012D8  588F                     345          add.l   #4,sp
+000012DA                           346          
+000012DA                           347  NoFuncPtr
+000012DA  4E75                     348          rts
+000012DC                           349  
+000012DC                           350  NoInput
+000012DC                           351          *bump to next ascii value
+000012DC  5282                     352          add.l    #1,d2
+000012DE  0C02 0054                353          cmpi.b   #$54,d2
+000012E2  66A2                     354          bne      CheckInput
+000012E4  4EF8 1280                355          jmp      InitData
+000012E8                           356  
+000012E8                           357  
+000012E8                           358  Center
+000012E8                           359         *high 16 bits = width
+000012E8                           360         *low 16 bits = height
+000012E8                           361         *divide by 2 to get center
+000012E8                           362         
+000012E8  7021                     363         move.l   #GET_SCREEN_SIZE,d0
+000012EA  323C 0000                364         move.w   #0,d1
+000012EE  4E4F                     365         trap     #15
+000012F0                           366         
+000012F0  33C1 002E4056            367         move.w   d1,screenHeight
+000012F6  3A01                     368         move.w   d1,d5
+000012F8                           369         
+000012F8  45F9 00001402            370         lea      objectPosY,a2
+000012FE  E24D                     371         lsr.w    #1,d5
+00001300  3485                     372         move.w   d5,(a2)
+00001302                           373         
+00001302  4841                     374         swap     d1
+00001304                           375         
+00001304  33C1 002E4058            376         move.w   d1,screenWidth
+0000130A  45F9 00001400            377         lea      objectPosX,a2
+00001310  E249                     378         lsr.w    #1,d1
+00001312  3481                     379         move.w   d1,(a2)
+00001314                           380         
+00001314  4E75                     381         rts
+00001316                           382          
+00001316                           383  RestartScreen
+00001316                           384    * Clears screen and resets drawing point at the center
+00001316  700B                     385          move.l   #CLEAR_SCREEN,d0
+00001318  323C FF00                386          move.w   #CLEAR_SCREEN_MAGIC_VAL,d1
+0000131C  4E4F                     387          trap     #15
+0000131E  4EB8 12E8                388          jsr      center
+00001322                           389          
+00001322  4E75                     390          rts
+00001324                           391  
+00001324                           392  
+00001324                           393  SortLeftRecycle
+00001324                           394    * if A is pressed, update graphics and indicate which bin the object was sorted into
+00001324  48E7 FCFE                395          movem.l ALL_REG,-(sp)
+00001328                           396          
+00001328  23FC 00000001 002E405A   397          move.l  #RECYCLE_BIN,chosenBin  
+00001332  4CDF 7F3F                398          movem.l (sp)+,ALL_REG
+00001336  4E75                     399          rts
+00001338                           400  
+00001338                           401  SortRightTrash
+00001338  48E7 FCFE                402          movem.l ALL_REG,-(sp) 
+0000133C                           403          
+0000133C  23FC 00000003 002E405A   404          move.l  #TRASH_BIN,chosenBin
+00001346  4CDF 7F3F                405          movem.l (sp)+,ALL_REG
+0000134A  4E75                     406          rts
+0000134C                           407  
+0000134C                           408  SortDownKeep
+0000134C  48E7 FCFE                409          movem.l ALL_REG,-(sp)   
+00001350                           410  
+00001350  23FC 00000002 002E405A   411          move.l  #KEEP_BIN,chosenBin
+0000135A  4CDF 7F3F                412          movem.l (sp)+,ALL_REG
+0000135E  4E75                     413          rts
+00001360                           414          
+00001360                           415          
+00001360                           416  ObjMovement
+00001360  2039 002E405A            417          move.l      chosenBin,d0
+00001366  B0BC 00000001            418          cmp.l       #RECYCLE_BIN,d0
+0000136C  6700 0018                419          beq         RecycleBinMove
+00001370                           420          
+00001370  B0BC 00000003            421          cmp.l       #TRASH_BIN,d0
+00001376  6700 0032                422          beq         TrashBinMove
+0000137A                           423          
+0000137A  B0BC 00000002            424          cmp.l       #KEEP_BIN,d0
+00001380  6700 004C                425          beq         KeepBinMove
+00001384                           426          
+00001384  4E75                     427          rts
+00001386                           428  
+00001386                           429  RecycleBinMove
+00001386                           430          *check boundary
+00001386  2039 002E403A            431          move.l      RandomObjPosX,d0
+0000138C  0C80 FFFFFFCE            432          cmpi.l      #-50,d0
+00001392  6D00 005E                433          blt         BinMoveEnd
+00001396                           434          
+00001396  2039 002E403A            435          move.l      randomObjPosX,d0
+0000139C  90B9 002E4052            436          sub.l       velocity,d0
+000013A2  23C0 002E403A            437          move.l      d0,randomObjPosX
+000013A8  4E75                     438          rts
+000013AA                           439  
+000013AA                           440  
+000013AA                           441  TrashBinMove
+000013AA                           442    *check boundary
+000013AA  2039 002E403A            443          move.l      RandomObjPosX,d0    
+000013B0  0C80 00000258            444          cmpi.l      #600,d0
+000013B6  6E00 003A                445          bgt         BinMoveEnd
+000013BA                           446          
+000013BA  2039 002E403A            447          move.l      randomObjPosX,d0
+000013C0  D0B9 002E4052            448          add.l       velocity,d0
+000013C6  23C0 002E403A            449          move.l      d0,randomObjPosX
+000013CC  4E75                     450          rts
+000013CE                           451          
+000013CE                           452  
+000013CE                           453  KeepBinMove
+000013CE                           454            *check boundary
+000013CE  2039 002E403E            455          move.l      RandomObjPosY,d0
+000013D4  0C80 000001F4            456          cmpi.l      #500,d0
+000013DA  6E00 0016                457          bgt         BinMoveEnd
+000013DE                           458          
+000013DE  2039 002E403E            459          move.l      randomObjPosY,d0
+000013E4  D0B9 002E4052            460          add.l       velocity,d0
+000013EA  23C0 002E403E            461          move.l      d0,randomObjPosY
+000013F0  4E75                     462          rts
+000013F2                           463  
+000013F2                           464  BinMoveEnd
+000013F2  23FC 00000001 002E4076   465          move.l      #1,objIsMoving
+000013FC  4E75                     466          rts 
+000013FE                           467  
+000013FE                           468  
+000013FE                           469  
+000013FE                           470  HAVE_HAD_NO_INPUT  ds.b    1
+000013FF                           471  
+00001400                           472  objectPosX         ds.w    1
+00001402                           473  objectPosY         ds.w    1
+00001404                           474  functionTable   
+00001404                           475                  *0-9
+00001404= 00001324 00000000 ...    476                  dc.l    SortLeftRecycle,0,0,SortRightTrash,0,0,0
+00001420= 00000000 00000000 ...    477                  dc.l    0,0,0,0,0,0,0
+0000143C= 00000000 00000000 ...    478                  dc.l    0,0,0,0,SortDownKeep,0
+00001454                           479  
+00001454                           480  
+00001454                           481  
+00001454                           482  
+00001454                           483  
+00001454                           484  
+00001454                           485  
+00001454                           486  
+00001454                           487  
+00001454                           488  
+00001454                           489  
+00001454                           490  
+00001454                           491  
+00001454                           492  
+00001454                           493  
+00001454                           494  
+00001454                           495  
+00001454                           496  
+00001454                           497  
+00001454                           498  
+00001454                           499  
+00001454                           500  
+00001454                           501  
+00001454                           502  
+00001454                           503  
+00001454                           504  
+00001454                           505  -------------------- end include --------------------
+00001454                           506      INCLUDE             "CheckObjectType.X68"
+00001454  =00000002                507  GOLD_OBJ            EQU  2
+00001454                           508   
+00001454                           509  
+00001454                           510  
+00001454                           511  
+00001454                           512  CheckObjSorted
+00001454  23FC 00000000 002E407E   513      move.l  #0,pointsToAdd
+0000145E  2039 002E407A            514      move.l  randomObjToSort,d0
+00001464  B0BC 00000002            515      cmp.l   #GOLD_OBJ,d0
+0000146A  6700 0006                516      beq     GoldCondition
+0000146E                           517      
+0000146E  6000 003A                518      bra     RegularCondition
+00001472                           519  
+00001472                           520  GoldCondition
+00001472  2039 002E405A            521      move.l  chosenBin,d0
+00001478  B0B9 002E407A            522      cmp.l   randomObjToSort,d0
+0000147E  6600 000E                523      bne     WrongGoldBin
+00001482                           524      
+00001482                           525  CorrectGoldBin
+00001482  06B9 0000001E 002E407E   526      add.l   #30,pointsToAdd
+0000148C  4E75                     527      rts
+0000148E                           528  
+0000148E                           529  WrongGoldBin
+0000148E  2039 002E4062            530      move.l  score,d0
+00001494  0C80 00000028            531      cmpi.l  #40,d0
+0000149A  6D00 0040                532      blt     FinishGoldCondition
+0000149E                           533      
+0000149E  04B9 0000001E 002E407E   534      sub.l   #30,pointsToAdd
+000014A8  4E75                     535      rts
+000014AA                           536      
+000014AA                           537  RegularCondition
+000014AA  B0B9 002E405A            538      cmp.l   chosenBin,d0
+000014B0  6600 0010                539      bne     WrongBin     
+000014B4                           540      
+000014B4                           541  CorrectBin
+000014B4  06B9 0000000A 002E407E   542      add.l   #10,pointsToAdd
+000014BE  6000 001A                543      bra     FinishRegCondition
+000014C2                           544      
+000014C2                           545  WrongBin
+000014C2  0CB9 00000000 002E4062   546      cmpi.l  #0,score
+000014CC  6700 000C                547      beq     FinishRegCondition
+000014D0                           548      
+000014D0  04B9 0000000A 002E4062   549      sub.l   #10,score
+000014DA                           550      
+000014DA                           551  
+000014DA                           552  FinishRegCondition
+000014DA  4E75                     553      rts
+000014DC                           554      
+000014DC                           555  FinishGoldCondition
+000014DC  23FC 00000000 002E4062   556      move.l  #0,score
+000014E6  4E75                     557      rts
+000014E8                           558        
+000014E8                           559  
+000014E8                           560  
+000014E8                           561  
+000014E8                           562  
+000014E8                           563  
+000014E8                           564  
+000014E8                           565  
+000014E8                           566  -------------------- end include --------------------
+000014E8                           567      INCLUDE             "BMP_32Bit_Subroutine.X68"
+000014E8  =00000050                568  PEN_COLOR_TRAP_CODE             EQU     80
+000014E8  =00000052                569  DRAW_PIXEL_TRAP_CODE            EQU     82
+000014E8  =00000021                570  SET_OUTPUT_RESOLUTION_TRAP_CODE EQU     33 
+000014E8  =0000FF65                571  TRANSPARENT_COLOR               EQU     $0000FF65
+000014E8                           572   
+000014E8  =0000424D                573  FILE_SIGNATURE                  EQU     $424D
+000014E8  =0000000D                574  PRINT_STRING_CR_LF              EQU     13
+000014E8                           575  
+000014E8  =0000000A                576  HEADER_STARTING_ADDRESS_OFFSET  EQU     10
+000014E8  =00000012                577  HEADER_WIDTH_OFFSET             EQU     18
+000014E8  =00000016                578  HEADER_HEIGHT_OFFSET            EQU     22
+000014E8  =0000001C                579  HEADER_BITSPPIXEL               EQU     28
+000014E8                           580  
+000014E8                           581  
+000014E8                           582  Check_File_Error
+000014E8  700D                     583      move.l  #PRINT_STRING_CR_LF,d0           
+000014EA  43F9 002E3B98            584      lea     ErrorMessage_WrongSignature, a1
+000014F0  4E4F                     585      TRAP    #15
+000014F2  FFFF FFFF                586      SIMHALT
+000014F6                           587  
+000014F6                           588  Check_File
+000014F6  41F9 000016D2            589      lea     START_OF_DATA,a0
+000014FC  3018                     590      move.w  (a0)+,d0
+000014FE  B07C 424D                591      cmp.w   #FILE_SIGNATURE,d0   
+00001502  66E4                     592      bne     Check_File_Error
+00001504  4E75                     593      rts
+00001506                           594  Initialize
+00001506  45F9 002E3BDC            595      lea  SelectionWidth,a2
+0000150C  24AF 0008                596      move.l  8(sp),(a2)
+00001510                           597      
+00001510  45F9 002E3BE0            598      lea  SelectionHeight,a2   
+00001516  24AF 000C                599      move.l  12(sp),(a2)
+0000151A                           600      
+0000151A  45F9 002E3BD8            601      lea  SelectionPosY,a2   
+00001520  24AF 0010                602      move.l  16(sp),(a2)
+00001524                           603      
+00001524  45F9 002E3BD4            604      lea  SelectionPosX,a2
+0000152A  24AF 0014                605      move.l  20(sp),(a2)
+0000152E                           606      
+0000152E  45F9 002E3BC2            607      lea     BMPosY,a2
+00001534  24AF 0018                608      move.l  24(sp),(a2)  
+00001538                           609  
+00001538  45F9 002E3BBA            610      lea     BMPosYDraw,a2
+0000153E  24B9 002E3BC2            611      move.l  BMPosY,(a2)  
+00001544                           612    
+00001544  45F9 002E3BBE            613      lea     BMPosX,a2
+0000154A  24AF 001C                614      move.l  28(sp),(a2) 
+0000154E                           615    
+0000154E  45F9 002E3BB6            616      lea     BMPosXDraw,a2
+00001554  24B9 002E3BBE            617      move.l  BMPosX,(a2) 
+0000155A                           618      
+0000155A  4E75                     619      rts
+0000155C                           620      
+0000155C                           621  SetScreenResolution
+0000155C                           622      
+0000155C                           623      * Set Screen Resolution
+0000155C  103C 0021                624      move.b  #SET_OUTPUT_RESOLUTION_TRAP_CODE,d0
+00001560  2239 002E4056            625      move.l  ScreenHeight,d1
+00001566  4841                     626      swap    d1
+00001568  4E4F                     627      trap    #15
+0000156A  4E75                     628      rts
+0000156C                           629  
+0000156C                           630  Display
+0000156C  4EB8 14F6                631      jsr     Check_File
+00001570                           632      
+00001570  4EB8 1506                633      jsr     Initialize
+00001574                           634      
+00001574  4EB9 0000167C            635      jsr     BM_Header           ; load header info into variables
+0000157A                           636      
+0000157A  4EB9 0000160E            637      jsr     Set_Selection      ; set selection of pixels to print
+00001580                           638  
+00001580  7A00                     639      move.l  #0,d5              ; sets  d4 to true to indicate first iteration case
+00001582                           640      
+00001582  4EB9 000015DA            641      jsr     Next_Row   
+00001588                           642      
+00001588  4E75                     643      rts     
+0000158A                           644  
+0000158A                           645  Endian_Conversion
+0000158A  202F 0004                646      move.l  4(sp),d0        
+0000158E  E158                     647      rol.w   #8,d0           
+00001590  4840                     648      swap    d0              
+00001592  E158                     649      rol.w   #8,d0           
+00001594                           650      
+00001594  4E75                     651      rts
+00001596                           652  Color_32bit
+00001596  103C 0050                653      move.b  #PEN_COLOR_TRAP_CODE,d0 ; sets pen color
+0000159A                           654      
+0000159A  2818                     655      move.l  (a0)+,d4
+0000159C  E08C                     656      lsr.l   #8,d4      
+0000159E  2204                     657      move.l  d4,d1
+000015A0                           658     
+000015A0  4E4F                     659      trap    #15
+000015A2                           660      
+000015A2  4E75                     661      rts
+000015A4                           662  
+000015A4                           663  Draw_Row
+000015A4  7A01                     664      move.l  #1,d5                      ; sets d4 to false to show program has starting drawing rows
+000015A6  4EB8 1596                665      jsr     Color_32bit
+000015AA  B8BC 0000FF65            666      cmp.l   #TRANSPARENT_COLOR,d4       ; checks for transparent color
+000015B0  6700 0014                667      beq     Move_To_Next_Draw_Pos   
+000015B4                           668      
+000015B4  103C 0052                669      move.b  #DRAW_PIXEL_TRAP_CODE,d0    ; draws pixel with set color at specified position
+000015B8  2239 002E3BB6            670      move.l  BMPosXDraw,d1                  ; draws pixel at specified position
+000015BE  2439 002E3BBA            671      move.l  BMPosYDraw,d2
+000015C4  4E4F                     672      trap    #15
+000015C6                           673  
+000015C6                           674  Move_To_Next_Draw_Pos   
+000015C6  52B9 002E3BB6            675      addq.l  #1,BMPosXDraw               ; points to the next x position
+000015CC  5283                     676      addq.l  #1,d3                       ; counter to ensure only the width amount of pixels are drawn per row
+000015CE                           677      
+000015CE  B6B9 002E3BDC            678      cmp.l   SelectionWidth,d3          ; ensures only width amount of pixels are drawn per row
+000015D4  6700 0004                679      beq     Next_Row
+000015D8                           680      
+000015D8  60CA                     681      bra     Draw_Row
+000015DA                           682    
+000015DA                           683  Next_Row
+000015DA  0C85 00000000            684      cmpi.l  #0,d5                   ; if true, skip first iteration of next_row 
+000015E0  67C2                     685      beq     Draw_Row
+000015E2                           686      
+000015E2  D1F9 002E3BE8            687      add.l   SelectionColorOffset,a0 ; skips rest of bytes for the row and moves pointer to next row in the pixel array
+000015E8  23F9 002E3BBE 002E3BB6   688      move.l  BMPosX,BMPosXDraw              ; resets x position to its original
+000015F2                           689      
+000015F2  4283                     690      clr.l   d3                      ; resets the pixel per row counter
+000015F4  53B9 002E3BBA            691      subq.l  #1,BMPosYDraw           ; moves pen to next y position
+000015FA  53B9 002E3BE0            692      subq.l  #1,SelectionHeight
+00001600                           693      
+00001600  0CB9 00000001 002E3BE0   694      cmpi.l  #1,SelectionHeight              ; ensures there are only n height rows drawn
+0000160A  6E98                     695      bgt     Draw_Row
+0000160C                           696      
+0000160C  4E75                     697      rts  
+0000160E                           698        
+0000160E                           699  Set_Selection
+0000160E                           700  
+0000160E  2439 002E3BC6            701      move.l  BMWidth,d2
+00001614  3639 002E3BCE            702      move.w  BMBitsPPixel,d3
+0000161A                           703      
+0000161A  2239 002E3BD4            704      move.l  SelectionPosX,d1           ; x pos
+00001620  2039 002E3BD8            705      move.l  SelectionPosY,d0           ; y pos
+00001626                           706      
+00001626  86FC 0008                707      divu.w  #8,d3                   ; getting the bytes per pixel
+0000162A                           708   
+0000162A  C4C3                     709      mulu.w  d3,d2                   ; image width x pytes per pixel
+0000162C  C0C2                     710      mulu.w  d2,d0                   ; pos y * (image width x bytes per pixel)
+0000162E  C2C3                     711      mulu.w  d3,d1                   ; pos x * (bytes per pixel)
+00001630                           712      
+00001630  D280                     713      add.l   d0,d1                   ; (y product) + (x product)
+00001632                           714      
+00001632  45F9 002E3BE4            715      lea     SelectionStartOffset,a2
+00001638  2481                     716      move.l  d1,(a2)                      ; assigning value of offset to the offset variable
+0000163A  D1F9 002E3BE4            717      add.l   SelectionStartOffset,a0     ; setting new starting position within pixel array
+00001640                           718     
+00001640                           719      
+00001640  2039 002E3BBA            720      move.l  BMPosYDraw,d0              ; setting pos y equal to the height of the image as well
+00001646  D0B9 002E3BE0            721      add.l   SelectionHeight,d0
+0000164C  45F9 002E3BBA            722      lea     BMPosYDraw, a2
+00001652  2480                     723      move.l  d0,(a2)
+00001654                           724      
+00001654  45F9 002E3BC2            725      lea     BMPosY,a2
+0000165A  24B9 002E3BE0            726      move.l  SelectionHeight,(a2) 
+00001660                           727      
+00001660                           728     
+00001660  2039 002E3BDC            729      move.l  SelectionWidth,d0      ; getting the sub-image selection width
+00001666  2239 002E3BC6            730      move.l  BMWidth,d1             ; getting the original image width
+0000166C                           731      
+0000166C  9280                     732      sub.l   d0,d1                   ; OG width - subwidth = # of bytes to skip for the next row
+0000166E                           733      
+0000166E  C2C3                     734      mulu.w  d3,d1                   ; multiplying by # of bytes per pixel for 24 bit image
+00001670                           735  
+00001670                           736   
+00001670  45F9 002E3BE8            737      lea     SelectionColorOffset,a2 ; assigning value to a variable 
+00001676  2481                     738      move.l  d1,(a2)
+00001678                           739   
+00001678  4283                     740      clr.l   d3                      ; clearing d3 register   
+0000167A  4E75                     741      rts
+0000167C                           742  
+0000167C                           743  
+0000167C                           744  BM_Header
+0000167C  41F9 000016D2            745      lea     START_OF_DATA,a0
+00001682                           746      
+00001682                           747      * recording address of first element of pixel array
+00001682  2F28 000A                748      move.l  HEADER_STARTING_ADDRESS_OFFSET(a0),-(sp)        ; offset to find starting address
+00001686  4EB8 158A                749      jsr     Endian_Conversion                   ; little to big endian conversion
+0000168A  588F                     750      add.l   #4,sp                               ; fix stack
+0000168C  45F9 002E3BB2            751      lea     BMStart,a2                          ; moves address BM_width is stored at into register a2
+00001692  2480                     752      move.l  d0,(a2)                             ; storing starting address offset value in BM_Start
+00001694                           753      
+00001694                           754      * recording width of BM
+00001694  2F28 0012                755      move.l  HEADER_WIDTH_OFFSET(a0),-(sp)       ; offset from starting address to find value of width
+00001698  4EB8 158A                756      jsr     Endian_Conversion                   ; little to big endian conversion
+0000169C  588F                     757      add.l   #4,sp                               ; fix stack
+0000169E  45F9 002E3BC6            758      lea     BMWidth,a2                          ; moves address BM_width is stored at into register a2
+000016A4  2480                     759      move.l  d0,(a2)                             ; storing width value in BM_width
+000016A6                           760      
+000016A6                           761      * recording height of BM
+000016A6  2F28 0016                762      move.l  HEADER_HEIGHT_OFFSET(a0),-(sp)      ; offset from starting address to find value of width
+000016AA  4EB8 158A                763      jsr     Endian_Conversion  
+000016AE  588F                     764      add.l   #4,sp               
+000016B0  45F9 002E3BCA            765      lea     BMHeight,a2        
+000016B6  2480                     766      move.l  d0,(a2)            
+000016B8                           767      
+000016B8                           768      * recording the BM's bits per pixel
+000016B8  2F28 001C                769      move.l  HEADER_BITSPPIXEL(a0),-(sp)         ; offset to find the number of bits per pixel of BM
+000016BC  4EB8 158A                770      jsr     Endian_Conversion  
+000016C0  588F                     771      add.l   #4,sp               
+000016C2  45F9 002E3BCE            772      lea     BMBitsPPixel,a2    
+000016C8  3480                     773      move.w  d0,(a2)            
+000016CA                           774      
+000016CA  D1F9 002E3BB2            775      add.l   BMStart,a0         ; setting pointer to start of pixel array
+000016D0                           776      
+000016D0  4E75                     777      rts
+000016D2                           778  
+000016D2                           779  
+000016D2                           780  START_OF_DATA
+000016D2                           781  DataFromBMP         INCBIN "TrashSortAssets.bmp"
+002E3B98                           782  END_OF_DATA
+002E3B98                           783  
+002E3B98                           784  
+002E3B98= 49 6E 63 6F 72 72 ...    785  ErrorMessage_WrongSignature dc.b 'Incorrect File Signature', 0
+002E3BB1                           786  
+002E3BB2                           787  BMStart            ds.l    1
+002E3BB6                           788  BMPosXDraw         ds.l    1
+002E3BBA                           789  BMPosYDraw         ds.l    1
+002E3BBE                           790  BMPosX             ds.l    1   
+002E3BC2                           791  BMPosY             ds.l    1
+002E3BC6                           792  BMWidth            ds.l    1
+002E3BCA                           793  BMHeight           ds.l    1
+002E3BCE                           794  BMBitsPPixel       ds.w    1
+002E3BD0                           795  PaddingBytes        ds.l    1
+002E3BD4                           796  SelectionPosX          ds.l    1
+002E3BD8                           797  SelectionPosY          ds.l    1
+002E3BDC                           798  Selectionwidth         ds.l    1
+002E3BE0                           799  SelectionHeight        ds.l    1
+002E3BE4                           800  SelectionStartOffset   ds.l    1
+002E3BE8                           801  SelectionColorOffset   ds.l    1
+002E3BEC                           802  
+002E3BEC                           803  
+002E3BEC                           804  
+002E3BEC                           805  
+002E3BEC                           806  
+002E3BEC                           807  
+002E3BEC                           808  
+002E3BEC                           809  
+002E3BEC                           810  
+002E3BEC                           811  
+002E3BEC                           812  -------------------- end include --------------------
+002E3BEC                           813      INCLUDE             "RandomObjectGenerator.X68"
+002E3BEC  =00000008                814  GET_TIME_COMMAND        EQU     8
+002E3BEC                           815  
+002E3BEC                           816  ;Seed the random number generator using the current time
+002E3BEC                           817  seedRandomNumber
+002E3BEC  48E7 FCFE                818          movem.l ALL_REG,-(sp)      ; Save registers
+002E3BF0  4286                     819          clr.l   d6
+002E3BF2  103C 0008                820          move.b  #GET_TIME_COMMAND,d0
+002E3BF6  4E4F                     821          TRAP    #15
+002E3BF8                           822  
+002E3BF8  23C1 002E3C46            823          move.l  d1,RANDOMVAL
+002E3BFE  4CDF 0007                824          movem.l (sp)+,d0-d2      ; Restore registers
+002E3C02  4E75                     825          rts
+002E3C04                           826  
+002E3C04                           827  ;Generate a random byte and store it in d6
+002E3C04                           828  getRandomByteIntoD6
+002E3C04  48E7 E000                829          movem.l d0-d2,-(sp)      ; Save registers
+002E3C08  2039 002E3C46            830          move.l  RANDOMVAL,d0
+002E3C0E  72AF                     831          moveq   #$AF-$100,d1
+002E3C10  7412                     832          moveq   #18,d2
+002E3C12                           833  Ninc0
+002E3C12  D080                     834          add.l   d0,d0
+002E3C14  6400 0004                835          bcc     Ninc1
+002E3C18  B300                     836          eor.b   d1,d0
+002E3C1A                           837  Ninc1
+002E3C1A  51CA FFF6                838          dbf     d2,Ninc0
+002E3C1E                           839  
+002E3C1E  23C0 002E3C46            840          move.l  d0,RANDOMVAL
+002E3C24                           841  
+002E3C24  2C00                     842          move.l  d0,d6            ; Store random value in d6
+002E3C26                           843  
+002E3C26  4CDF 0007                844          movem.l (sp)+,d0-d2      ; Restore registers
+002E3C2A  4E75                     845          rts
+002E3C2C                           846  
+002E3C2C                           847  ;Generate a random number between 0 and 2 and store it in d7
+002E3C2C                           848  RandomObjGenerator
+002E3C2C  4EB9 002E3C04            849          jsr     getRandomByteIntoD6
+002E3C32  2006                     850          move.l  d6,d0            ; Move the random value to d0
+002E3C34  0280 000000FF            851          andi.l  #$FF,d0          ; Ensure it is within byte range
+002E3C3A  80FC 0003                852          divu    #3,d0            ; Divide by 3 to get remainder (0, 1, or 2)
+002E3C3E  4840                     853          swap    d0
+002E3C40  5280                     854          addq.l  #1,d0
+002E3C42  1E00                     855          move.b  d0,d7            ; Move result to d7
+002E3C44                           856  
+002E3C44  4E75                     857          rts
+002E3C46                           858  
+002E3C46                           859  Variables
+002E3C46                           860  RANDOMVAL       ds.l    1
+002E3C4A                           861  
+002E3C4A                           862  
+002E3C4A                           863  
+002E3C4A                           864  -------------------- end include --------------------
+002E3C4A                           865      INCLUDE             "DisplayRandomObject.X68"
+002E3C4A                           866  DisplayRandomObj                
+002E3C4A                           867          * if random obj is recycle, find on bitmap to print
+002E3C4A  2039 002E407A            868          move.l      randomObjToSort,d0
+002E3C50  0C80 00000001            869          cmpi.l      #1,d0
+002E3C56  6700 002E                870          beq         DisplayRecycleObj
+002E3C5A                           871          
+002E3C5A  0C80 00000002            872          cmpi.l      #2,d0
+002E3C60  6700 0080                873          beq         DisplayGoldObj
+002E3C64                           874          
+002E3C64  0C80 00000003            875          cmpi.l      #3,d0
+002E3C6A  6700 0048                876          beq         DisplayTrashObj
+002E3C6E                           877          
+002E3C6E                           878  DisplayRandomObjEnd       
+002E3C6E  2F01                     879          move.l      d1,-(sp) ; Screen pos x
+002E3C70  2F02                     880          move.l      d2,-(sp) ; Screen pos y
+002E3C72  2F03                     881          move.l      d3,-(sp) ; Selection Position X
+002E3C74  2F04                     882          move.l      d4,-(sp) ; Selection Position Y
+002E3C76  2F05                     883          move.l      d5,-(sp) ;HEIGHT
+002E3C78  2F06                     884          move.l      d6,-(sp) ;WIDTH
+002E3C7A  4EB8 156C                885          jsr         display
+002E3C7E  DFFC 00000018            886          add.l       #24,sp
+002E3C84  4E75                     887          rts 
+002E3C86                           888              
+002E3C86                           889  DisplayRecycleObj
+002E3C86  23FC 00000050 002E404A   890          move.l      #80,invalHeight
+002E3C90  23FC 00000034 002E404E   891          move.l      #52,invalWidth
+002E3C9A                           892  
+002E3C9A  2239 002E403A            893          move.l      randomObjPosX,d1 ; Selection Position X
+002E3CA0  2439 002E403E            894          move.l      randomObjPosY,d2 ; Selection Position Y
+002E3CA6  263C 00000329            895          move.l      #809,d3 ; Selection Position X
+002E3CAC  7800                     896          move.l      #0,d4 ; Selection Position Y
+002E3CAE  7A50                     897          move.l      #80,d5 ;HEIGHT
+002E3CB0  7C34                     898          move.l      #52,d6 ;WIDTH
+002E3CB2                           899          
+002E3CB2                           900          
+002E3CB2  60BA                     901          bra         DisplayRandomObjEnd
+002E3CB4                           902          
+002E3CB4                           903  
+002E3CB4                           904  DisplayTrashObj
+002E3CB4  23FC 00000046 002E404A   905          move.l      #70,invalHeight
+002E3CBE  23FC 0000004E 002E404E   906          move.l      #78,invalWidth
+002E3CC8                           907        
+002E3CC8  2239 002E403A            908          move.l      randomObjPosX,d1 ; Selection Position X
+002E3CCE  2439 002E403E            909          move.l      randomObjPosY,d2 ; Selection Position Y
+002E3CD4  263C 000003D6            910          move.l      #982,d3 
+002E3CDA  7807                     911          move.l      #7,d4 
+002E3CDC  7A46                     912          move.l      #70,d5 
+002E3CDE  7C4E                     913          move.l      #78,d6 
+002E3CE0  608C                     914          bra         DisplayRandomObjEnd
+002E3CE2                           915  DisplayGoldObj
+002E3CE2  23FC 00000046 002E404A   916          move.l      #70,invalHeight
+002E3CEC  23FC 0000004F 002E404E   917          move.l      #79,invalWidth
+002E3CF6                           918          
+002E3CF6  2239 002E403A            919          move.l      randomObjPosX,d1 ; Selection Position X
+002E3CFC  2439 002E403E            920          move.l      randomObjPosY,d2 ; Selection Position Y
+002E3D02  263C 0000037E            921          move.l      #894,d3 
+002E3D08  7800                     922          move.l      #0,d4 
+002E3D0A  7A46                     923          move.l      #70,d5
+002E3D0C  7C4F                     924          move.l      #79,d6
+002E3D0E  6000 FF5E                925          bra         DisplayRandomObjEnd
+002E3D12                           926          
+002E3D12                           927  DisplayLoadingScreen
+002E3D12  223C 000000C8            928          move.l      #200,d1 ; Screen Position X
+002E3D18  243C 000000D7            929          move.l      #215,d2 ; Screen  Position Y
+002E3D1E  263C 00000276            930          move.l      #630,d3 ; Selection Position X
+002E3D24  283C 00000224            931          move.l      #548,d4 ; Selection Position Y
+002E3D2A  7A41                     932          move.l      #65,d5 ;HEIGHT
+002E3D2C  2C3C 00000113            933          move.l      #275,d6 ;WIDTH
+002E3D32  4EB9 002E3C6E            934          jsr         DisplayRandomObjEnd
+002E3D38  4E75                     935          rts        
+002E3D3A                           936  DisplayEnterScreen
+002E3D3A  223C 0000009B            937          move.l      #155,d1 ; Screen Position X
+002E3D40  243C 0000009B            938          move.l      #155,d2 ; Screen  Position Y
+002E3D46  7612                     939          move.l      #18,d3 ; Selection Position X
+002E3D48  283C 000001E3            940          move.l      #483,d4 ; Selection Position Y
+002E3D4E  2A3C 000000B4            941          move.l      #180,d5 ;HEIGHT
+002E3D54  2C3C 00000176            942          move.l      #374,d6 ;WIDTH
+002E3D5A  4EB9 002E3C6E            943          jsr         DisplayRandomObjEnd
+002E3D60  4E75                     944          rts
+002E3D62                           945          
+002E3D62                           946  DisplayBackground
+002E3D62  7200                     947          move.l      #0,d1 ; Screen Position X
+002E3D64  7400                     948          move.l      #0,d2 ; Screen  Position Y
+002E3D66  7600                     949          move.l      #0,d3 ; Selection Position X
+002E3D68  7800                     950          move.l      #0,d4 ; Selection Position Y
+002E3D6A  2A3C 000001E0            951          move.l      #480,d5 ;HEIGHT
+002E3D70  2C3C 000002A8            952          move.l      #680,d6 ;WIDTH
+002E3D76  4EB9 002E3C6E            953          jsr         DisplayRandomObjEnd
+002E3D7C  4E75                     954          rts     
+002E3D7E                           955  
+002E3D7E                           956  
+002E3D7E                           957  
+002E3D7E                           958  
+002E3D7E                           959  
+002E3D7E                           960  
+002E3D7E                           961  
+002E3D7E                           962  
+002E3D7E                           963  -------------------- end include --------------------
+002E3D7E                           964      INCLUDE             "SevenSegSubroutine.X68"
+002E3D7E                           965  
+002E3D7E  =0000005D                966  PEN_WIDTH_COMMAND   EQU  93
+002E3D7E  =00000003                967  PEN_WIDTH           EQU  3
+002E3D7E                           968  
+002E3D7E  =00000050                969  PEN_COLOR_COMMAND   EQU  80
+002E3D7E  =00FFFFFF                970  SEG_COLOR           EQU  $00FFFFFF
+002E3D7E                           971  
+002E3D7E  =00000054                972  DRAW_COMMAND        EQU  84   
+002E3D7E                           973  
+002E3D7E                           974  ;START   ORG $1000
+002E3D7E                           975  SevenSegDisplay
+002E3D7E  23FC 00000000 002E3FE6   976              move.l  #0,counter
+002E3D88  2C39 002E4066            977              move.l  numberToDisplay,d6
+002E3D8E  4EB9 002E3E18            978              jsr     NumberOfDigits
+002E3D94  23F9 002E406A 002E3FEA   979              move.l  centerX,centerXWithOffset
+002E3D9E                           980  SegCheck
+002E3D9E                           981  
+002E3D9E                           982              * sets display offset depending on number of digits
+002E3D9E  2039 002E3FE6            983              move.l  counter,d0
+002E3DA4  7212                     984              move.l  #18,d1
+002E3DA6  C0C1                     985              mulu.w  d1,d0
+002E3DA8  23C0 002E3FDE            986              move.l  d0,digitDisplayOffset
+002E3DAE                           987              
+002E3DAE  2039 002E406A            988              move.l  centerX,d0
+002E3DB4  90B9 002E3FDE            989              sub.l   digitDisplayOffset,d0
+002E3DBA  23C0 002E3FEA            990              move.l  d0,centerXWithOffset
+002E3DC0                           991              
+002E3DC0                           992              * only reads last digit of the number to display
+002E3DC0  2039 002E4066            993              move.l  numberToDisplay,d0
+002E3DC6  80FC 000A                994              divu.w  #10,d0
+002E3DCA  4840                     995              swap    d0
+002E3DCC  3A00                     996              move.w  d0,d5
+002E3DCE  E58D                     997              lsl.l   #2,d5
+002E3DD0                           998              
+002E3DD0  4EB9 002E3FA2            999              jsr     ResetSegPosition
+002E3DD6                          1000             
+002E3DD6  41F9 002E3FFE           1001              lea     SevenSegBitmask,a0
+002E3DDC  2C30 5000               1002              move.l  (a0,d5),d6     ; number from table stored in d1
+002E3DE0                          1003              
+002E3DE0  4EB9 002E3FCC           1004              jsr     SetPenSettings
+002E3DE6  4EB9 002E3E2E           1005              jsr     DisplaySegment ; go through display conditional statements
+002E3DEC                          1006              
+002E3DEC  4286                    1007              clr.l   d6
+002E3DEE                          1008              
+002E3DEE  2039 002E4066           1009              move.l  numberToDisplay,d0
+002E3DF4  80FC 000A               1010              divu.w   #10,d0
+002E3DF8  3C00                    1011              move.w  d0,d6
+002E3DFA  2006                    1012              move.l  d6,d0
+002E3DFC  23C0 002E4066           1013              move.l  d0,numberToDisplay
+002E3E02                          1014              
+002E3E02  52B9 002E3FE6           1015              add.l   #1,counter
+002E3E08                          1016              
+002E3E08  2039 002E3FE2           1017              move.l  numOfDigits,d0
+002E3E0E  B0B9 002E3FE6           1018              cmp.l  counter,d0
+002E3E14  6E88                    1019              bgt     SegCheck
+002E3E16                          1020              
+002E3E16  4E75                    1021              rts
+002E3E18                          1022              
+002E3E18                          1023              ;SIMHALT
+002E3E18                          1024              
+002E3E18                          1025  NumberOfDigits
+002E3E18                          1026              
+002E3E18  52B9 002E3FE2           1027              add.l   #1,numOfDigits
+002E3E1E  8CFC 000A               1028              divu.w  #10,d6
+002E3E22  3006                    1029              move.w  d6,d0
+002E3E24  2C00                    1030              move.l  d0,d6
+002E3E26                          1031              
+002E3E26                          1032              * finding the number of digits of the inputted number
+002E3E26  0C46 0000               1033              cmpi.w  #0,d6
+002E3E2A  6EEC                    1034              bgt     NumberOfDigits
+002E3E2C                          1035              
+002E3E2C                          1036  NumberOfDigitsEnd
+002E3E2C  4E75                    1037              rts            
+002E3E2E                          1038              
+002E3E2E                          1039              
+002E3E2E                          1040  DisplaySegment
+002E3E2E                          1041              ; display segment G
+002E3E2E  0806 0000               1042              btst.l  #00,d6
+002E3E32  6700 001A               1043              beq     DisplaySegF
+002E3E36                          1044              
+002E3E36                          1045              * drawing segment based on center position
+002E3E36  57B9 002E3FEE           1046              sub.l   #3,segX1
+002E3E3C  56B9 002E3FF6           1047              add.l   #3,segX2
+002E3E42                          1048              
+002E3E42  4EB9 002E3F84           1049              jsr     DrawSegment
+002E3E48  4EB9 002E3FA2           1050              jsr     ResetSegPosition
+002E3E4E                          1051                
+002E3E4E                          1052  DisplaySegF
+002E3E4E  E89E                    1053              ror.l   #4,d6
+002E3E50  0806 0000               1054              btst.l  #00,d6
+002E3E54  6700 002A               1055              beq     DisplaySegE
+002E3E58                          1056              
+002E3E58                          1057              * drawing segment based on center position
+002E3E58  51B9 002E3FF2           1058              sub.l   #8,segY1
+002E3E5E  5DB9 002E3FEE           1059              sub.l   #6,segX1
+002E3E64                          1060              
+002E3E64  23F9 002E3FEE 002E3FF6  1061              move.l  segX1,segX2
+002E3E6E  55B9 002E3FFA           1062              sub.l   #2,segY2
+002E3E74                          1063              
+002E3E74  4EB9 002E3F84           1064              jsr     DrawSegment
+002E3E7A  4EB9 002E3FA2           1065              jsr     ResetSegPosition
+002E3E80                          1066  
+002E3E80                          1067  DisplaySegE
+002E3E80  E89E                    1068              ror.l   #4,d6
+002E3E82  0806 0000               1069              btst.l  #00,d6
+002E3E86  6700 002A               1070              beq     DisplaySegD
+002E3E8A                          1071              
+002E3E8A                          1072              * drawing segment based on center position
+002E3E8A  54B9 002E3FF2           1073              add.l   #2,segY1
+002E3E90  5DB9 002E3FEE           1074              sub.l   #6,segX1
+002E3E96                          1075              
+002E3E96  23F9 002E3FEE 002E3FF6  1076              move.l  segX1,segX2
+002E3EA0  50B9 002E3FFA           1077              add.l   #8,segY2
+002E3EA6                          1078              
+002E3EA6  4EB9 002E3F84           1079              jsr     DrawSegment
+002E3EAC  4EB9 002E3FA2           1080              jsr     ResetSegPosition
+002E3EB2                          1081  
+002E3EB2                          1082  DisplaySegD
+002E3EB2  E89E                    1083              ror.l   #4,d6
+002E3EB4  0806 0000               1084              btst.l  #00,d6
+002E3EB8  6700 002E               1085              beq     DisplaySegC
+002E3EBC                          1086              
+002E3EBC                          1087              * drawing segment based on center position
+002E3EBC  57B9 002E3FEE           1088              sub.l   #3,segX1
+002E3EC2  06B9 0000000A 002E3FF2  1089              add.l   #10,segY1
+002E3ECC                          1090              
+002E3ECC  56B9 002E3FF6           1091              add.l   #3,segX2
+002E3ED2  23F9 002E3FF2 002E3FFA  1092              move.l  segY1,segY2
+002E3EDC                          1093              
+002E3EDC  4EB9 002E3F84           1094              jsr     DrawSegment
+002E3EE2  4EB9 002E3FA2           1095              jsr     ResetSegPosition
+002E3EE8                          1096  
+002E3EE8                          1097  DisplaySegC
+002E3EE8  E89E                    1098              ror.l   #4,d6
+002E3EEA  0806 0000               1099              btst.l  #00,d6
+002E3EEE  6700 002A               1100              beq     DisplaySegB
+002E3EF2                          1101              
+002E3EF2                          1102              * drawing segment based on center position
+002E3EF2  54B9 002E3FF2           1103              add.l   #2,segY1
+002E3EF8  5CB9 002E3FEE           1104              add.l   #6,segX1
+002E3EFE                          1105              
+002E3EFE  23F9 002E3FEE 002E3FF6  1106              move.l  segX1,segX2
+002E3F08  50B9 002E3FFA           1107              add.l   #8,segY2
+002E3F0E                          1108              
+002E3F0E  4EB9 002E3F84           1109              jsr     DrawSegment
+002E3F14  4EB9 002E3FA2           1110              jsr     ResetSegPosition
+002E3F1A                          1111  
+002E3F1A                          1112  DisplaySegB
+002E3F1A  E89E                    1113              ror.l   #4,d6
+002E3F1C  0806 0000               1114              btst.l  #00,d6
+002E3F20  6700 002A               1115              beq     DisplaySegA
+002E3F24                          1116              
+002E3F24                          1117              * drawing segment based on center position
+002E3F24  51B9 002E3FF2           1118              sub.l   #8,segY1
+002E3F2A  5CB9 002E3FEE           1119              add.l   #6,segX1
+002E3F30                          1120              
+002E3F30  23F9 002E3FEE 002E3FF6  1121              move.l  segX1,segX2
+002E3F3A  55B9 002E3FFA           1122              sub.l   #2,segY2
+002E3F40                          1123              
+002E3F40  4EB9 002E3F84           1124              jsr     DrawSegment
+002E3F46  4EB9 002E3FA2           1125              jsr     ResetSegPosition
+002E3F4C                          1126  
+002E3F4C                          1127                
+002E3F4C                          1128  DisplaySegA
+002E3F4C  E89E                    1129              ror.l   #4,d6
+002E3F4E  0806 0000               1130              btst.l  #00,d6
+002E3F52  6700 002E               1131              beq     DisplaySegEnd
+002E3F56                          1132              
+002E3F56                          1133              * drawing segment based on center position
+002E3F56  57B9 002E3FEE           1134              sub.l   #3,segX1
+002E3F5C  04B9 0000000A 002E3FF2  1135              sub.l   #10,segY1
+002E3F66                          1136              
+002E3F66  56B9 002E3FF6           1137              add.l   #3,segX2
+002E3F6C  23F9 002E3FF2 002E3FFA  1138              move.l  segY1,segY2
+002E3F76                          1139              
+002E3F76  4EB9 002E3F84           1140              jsr     DrawSegment
+002E3F7C  4EB9 002E3FA2           1141              jsr     ResetSegPosition
+002E3F82                          1142  
+002E3F82                          1143  DisplaySegEnd
+002E3F82  4E75                    1144              rts
+002E3F84                          1145              
+002E3F84                          1146  DrawSegment
+002E3F84  7054                    1147              move.l  #DRAW_COMMAND,d0
+002E3F86  2239 002E3FEE           1148              move.l  segX1,d1
+002E3F8C  2439 002E3FF2           1149              move.l  segY1,d2
+002E3F92  2639 002E3FF6           1150              move.l  segX2,d3
+002E3F98  2839 002E3FFA           1151              move.l  segY2,d4
+002E3F9E  4E4F                    1152              trap    #15
+002E3FA0  4E75                    1153              rts
+002E3FA2                          1154              
+002E3FA2                          1155  ResetSegPosition
+002E3FA2  23F9 002E3FEA 002E3FEE  1156              move.l  centerXWithOffset,segX1
+002E3FAC  23F9 002E3FEA 002E3FF6  1157              move.l  centerXWithOffset,segX2
+002E3FB6  23F9 002E406E 002E3FF2  1158              move.l  centerY,segY1
+002E3FC0  23F9 002E406E 002E3FFA  1159              move.l  centerY,segY2
+002E3FCA  4E75                    1160              rts
+002E3FCC                          1161  
+002E3FCC                          1162  SetPenSettings
+002E3FCC  705D                    1163              move.l  #PEN_WIDTH_COMMAND,d0
+002E3FCE  7203                    1164              move.l  #PEN_WIDTH,d1
+002E3FD0  4E4F                    1165              trap    #15
+002E3FD2                          1166              
+002E3FD2  7050                    1167              move.l  #PEN_COLOR_COMMAND,d0
+002E3FD4  223C 00FFFFFF           1168              move.l  #SEG_COLOR,d1
+002E3FDA  4E4F                    1169              trap    #15
+002E3FDC  4E75                    1170              rts
+002E3FDE                          1171              
+002E3FDE                          1172  
+002E3FDE= 00000000                1173  digitDisplayOffset  dc.l    0
+002E3FE2= 00000000                1174  numOfDigits         dc.l    0
+002E3FE6= 00000000                1175  counter             dc.l    0
+002E3FEA                          1176  
+002E3FEA                          1177  
+002E3FEA= 002E406A                1178  centerXWithOffset   dc.l    centerX
+002E3FEE                          1179  
+002E3FEE= 00000000                1180  segX1               dc.l    0
+002E3FF2= 00000000                1181  segY1               dc.l    0
+002E3FF6= 00000000                1182  segX2               dc.l    0
+002E3FFA= 00000000                1183  segY2               dc.l    0
+002E3FFE                          1184              
+002E3FFE                          1185  SevenSegBitmask
+002E3FFE= 01111110 00110000 ...   1186              dc.l    $01111110, $00110000, $01101101, $01111001, $00110011 
+002E4012= 01011011 01011111 ...   1187              dc.l    $01011011, $01011111, $01110000, $01111111, $01111011 
+002E4026                          1188    
+002E4026                          1189    ;END START
+002E4026                          1190  
+002E4026                          1191  
+002E4026                          1192  
+002E4026                          1193  -------------------- end include --------------------
+002E4026                          1194      
+002E4026= 00000001                1195  LastFrameKeyDown    dc.l    1
+002E402A                          1196  CurrentFrameKeyDown ds.l    1
+002E402E                          1197  LastFrameTime       ds.l    1
+002E4032                          1198  CurrentFrameTime    ds.l    1
+002E4036                          1199  deltaTime           ds.l    1
+002E403A                          1200  
+002E403A= 00000118                1201  randomObjPosX       dc.l    280
+002E403E= FFFFFFCE                1202  randomObjPosY       dc.l    -50  
+002E4042                          1203  
+002E4042= 00000118                1204  invalPosX           dc.l    280
+002E4046= FFFFFFCE                1205  invalPosY           dc.l    -50  
+002E404A                          1206  invalHeight         ds.l    1
+002E404E                          1207  invalWidth          ds.l    1
+002E4052                          1208  
+002E4052= 00000050                1209  velocity            dc.l    80
+002E4056                          1210      
+002E4056= 01E0                    1211  screenHeight        dc.w    480
+002E4058= 02A8                    1212  screenWidth         dc.w    680
+002E405A= 00000000                1213  chosenBin           dc.l    0
+002E405E= 00000001                1214  sortedObj           dc.l    1
+002E4062= 00000000                1215  score               dc.l    0
+002E4066                          1216  
+002E4066                          1217  * 7 seg display ----------------
+002E4066= 00000000                1218  numberToDisplay     dc.l    0  
+002E406A= 00000000                1219  centerX             dc.l    0
+002E406E= 00000000                1220  centerY             dc.l    0
+002E4072                          1221  * ------------------------------
+002E4072                          1222  
+002E4072= 00000001                1223  objDropped          dc.l    1
+002E4076= 00000001                1224  objIsMoving         dc.l    1
+002E407A= 00000001                1225  randomObjToSort     dc.l    1
+002E407E= 00000000                1226  pointsToAdd         dc.l    0
+002E4082                          1227  
+002E4082                          1228  
+002E4082  =0000000D               1229  CR                  EQU     $0D
+002E4082  =0000000A               1230  LF                  EQU     $0A
+002E4082                          1231  
+002E4082= 24 00                   1232  scoreString         dc.b    '$',0
+002E4084                          1233  
+002E4084= 52 45 43 59 43 4C ...   1234  recycleString       dc.b    'RECYCLE BIN',CR,LF,0
+002E4092                          1235                      
+002E4092= 54 52 41 53 48 20 ...   1236  trashString         dc.b    'TRASH BIN',CR,LF,0
+002E409E                          1237                      
+002E409E= 4B 45 45 50 0D 0A 00    1238  keepString          dc.b    'KEEP',CR,LF,0
+002E40A5                          1239  
+002E40A5                          1240  
+002E40A5                          1241  
+002E40A5                          1242      END    START        ; last line of source
+
+No errors detected
+No warnings generated
+
+
+SYMBOL TABLE INFORMATION
+Symbol-name         Value
+-------------------------
+ALL_REG             7F3F
+BACKGROUND_COLOR    9C6258
+BINMOVEEND          13F2
+BMBITSPPIXEL        2E3BCE
+BMHEIGHT            2E3BCA
+BMPOSX              2E3BBE
+BMPOSXDRAW          2E3BB6
+BMPOSY              2E3BC2
+BMPOSYDRAW          2E3BBA
+BMSTART             2E3BB2
+BMWIDTH             2E3BC6
+BM_HEADER           167C
+CALCSCORE           1254
+CALLFUNCTION        129C
+CENTER              12E8
+CENTERX             2E406A
+CENTERXWITHOFFSET   2E3FEA
+CENTERY             2E406E
+CHECKINPUT          1286
+CHECKOBJSORTED      1454
+CHECK_FILE          14F6
+CHECK_FILE_ERROR    14E8
+CHOSENBIN           2E405A
+CLEAR_SCREEN        B
+CLEAR_SCREEN_COMMAND  B
+CLEAR_SCREEN_MAGIC_VAL  FF00
+COLOR_32BIT         1596
+CORRECTBIN          14B4
+CORRECTGOLDBIN      1482
+COUNTER             2E3FE6
+CR                  D
+CURRENTFRAMEKEYDOWN  2E402A
+CURRENTFRAMETIME    2E4032
+DATAFROMBMP         16D2
+DELTATIME           2E4036
+DIGITDISPLAYOFFSET  2E3FDE
+DISPLAY             156C
+DISPLAYBACKGROUND   2E3D62
+DISPLAYBINLABELS    11BA
+DISPLAYENTERSCREEN  2E3D3A
+DISPLAYGOLDOBJ      2E3CE2
+DISPLAYLOADINGSCREEN  2E3D12
+DISPLAYRANDOMNUM    121E
+DISPLAYRANDOMOBJ    2E3C4A
+DISPLAYRANDOMOBJEND  2E3C6E
+DISPLAYRECYCLEOBJ   2E3C86
+DISPLAYSCORE        122E
+DISPLAYSEGA         2E3F4C
+DISPLAYSEGB         2E3F1A
+DISPLAYSEGC         2E3EE8
+DISPLAYSEGD         2E3EB2
+DISPLAYSEGE         2E3E80
+DISPLAYSEGEND       2E3F82
+DISPLAYSEGF         2E3E4E
+DISPLAYSEGMENT      2E3E2E
+DISPLAYTRASHOBJ     2E3CB4
+DISPLAY_SCORE       F
+DISPLAY_STRING      5F
+DOUBLE_BUFFERED_MODE  11
+DRAWING_MODE_COMMAND  5C
+DRAWSEGMENT         2E3F84
+DRAW_COMMAND        54
+DRAW_PIXEL_TRAP_CODE  52
+DRAW_RECTANGLE      57
+DRAW_ROW            15A4
+ENDIAN_CONVERSION   158A
+END_OF_DATA         2E3B98
+ENTER_GAMELOOP_INPUT  5
+ERRORMESSAGE_WRONGSIGNATURE  2E3B98
+FILE_SIGNATURE      424D
+FILLBACKGROUND      11F2
+FILL_COLOR          51
+FILL_COLOR_COMMAND  51
+FINISHGOLDCONDITION  14DC
+FINISHREGCONDITION  14DA
+FLOOD_FILL_COMMAND  59
+FUNCTIONTABLE       1404
+GAMELOOP            1058
+GAMELOOPINITIALIZE  1046
+GETRANDOMBYTEINTOD6  2E3C04
+GET_KEY_INPUT_COMMAND  13
+GET_SCREEN_SIZE     21
+GET_TIME_COMMAND    8
+GOLDCONDITION       1472
+GOLD_OBJ            2
+HAVE_HAD_NO_INPUT   13FE
+HEADER_BITSPPIXEL   1C
+HEADER_HEIGHT_OFFSET  16
+HEADER_STARTING_ADDRESS_OFFSET  A
+HEADER_WIDTH_OFFSET  12
+INITDATA            1280
+INITIALIZE          1506
+INPUT               10A0
+INPUTOBJMOVEMENT    1106
+INVALHEIGHT         2E404A
+INVALPOSX           2E4042
+INVALPOSY           2E4046
+INVALWIDTH          2E404E
+KEEPBINMOVE         13CE
+KEEPSTRING          2E409E
+KEEP_BIN            2
+KEY_DOWN_INPUT      53
+KEY_LEFT_INPUT      41
+KEY_RIGHT_INPUT     44
+LASTFRAMEKEYDOWN    2E4026
+LASTFRAMETIME       2E402E
+LF                  A
+MAININITIALIZE      1000
+MOVE_OBJECT_POSITION  56
+MOVE_TO_NEXT_DRAW_POS  15C6
+NEXT_ROW            15DA
+NINC0               2E3C12
+NINC1               2E3C1A
+NOFUNCPTR           12DA
+NOINPUT             12DC
+NUMBEROFDIGITS      2E3E18
+NUMBEROFDIGITSEND   2E3E2C
+NUMBERTODISPLAY     2E4066
+NUMOFDIGITS         2E3FE2
+OBJDROPCOMPLETE     10E8
+OBJDROPPED          2E4072
+OBJECTPOSX          1400
+OBJECTPOSY          1402
+OBJINVAL            1180
+OBJISMOVING         2E4076
+OBJMOVEMENT         1360
+PADDINGBYTES        2E3BD0
+PEN_COLOR           50
+PEN_COLOR_COMMAND   50
+PEN_COLOR_TRAP_CODE  50
+PEN_WIDTH           3
+PEN_WIDTH_COMMAND   5D
+POINTSTOADD         2E407E
+PRINT_STRING        5F
+PRINT_STRING_CR_LF  D
+RANDOMOBJDROP       120A
+RANDOMOBJGENERATOR  2E3C2C
+RANDOMOBJPOSX       2E403A
+RANDOMOBJPOSY       2E403E
+RANDOMOBJTOSORT     2E407A
+RANDOMVAL           2E3C46
+RECYCLEBINMOVE      1386
+RECYCLESTRING       2E4084
+RECYCLE_BIN         1
+REGULARCONDITION    14AA
+RENDER              1152
+REPAINT_SCREEN_COMMAND  5E
+RESETSEGPOSITION    2E3FA2
+RESTARTSCREEN       1316
+SCORE               2E4062
+SCORESTRING         2E4082
+SCREENHEIGHT        2E4056
+SCREENWIDTH         2E4058
+SEEDRANDOMNUMBER    2E3BEC
+SEGCHECK            2E3D9E
+SEGX1               2E3FEE
+SEGX2               2E3FF6
+SEGY1               2E3FF2
+SEGY2               2E3FFA
+SEG_COLOR           FFFFFF
+SELECTIONCOLOROFFSET  2E3BE8
+SELECTIONHEIGHT     2E3BE0
+SELECTIONPOSX       2E3BD4
+SELECTIONPOSY       2E3BD8
+SELECTIONSTARTOFFSET  2E3BE4
+SELECTIONWIDTH      2E3BDC
+SETPENSETTINGS      2E3FCC
+SETSCREENRESOLUTION  155C
+SET_OUTPUT_RESOLUTION_TRAP_CODE  21
+SET_SELECTION       160E
+SEVENSEGBITMASK     2E3FFE
+SEVENSEGDISPLAY     2E3D7E
+SORTDOWNKEEP        134C
+SORTEDOBJ           2E405E
+SORTLEFTRECYCLE     1324
+SORTRIGHTTRASH      1338
+START               1000
+START_OF_DATA       16D2
+SWAPBUFFERS         1274
+TRANSPARENT_COLOR   FF65
+TRASHBINMOVE        13AA
+TRASHSTRING         2E4092
+TRASH_BIN           3
+UPDATE              10D0
+VARIABLES           2E3C46
+VELOCITY            2E4052
+WAITFORENTER        1026
+WRONGBIN            14C2
+WRONGGOLDBIN        148E
