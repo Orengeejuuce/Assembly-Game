@@ -16,8 +16,10 @@ DRAW_COMMAND        EQU  84
 ;START   ORG $1000
 * takes in center position and number to display
 SevenSegDisplay
+            move.l  #0,numOfDigits
             move.l  #0,counter
             move.l  numberToDisplay,d6
+            move.l  #0,d0
             jsr     NumberOfDigits
             move.l  centerX,centerXWithOffset
 SegCheck
@@ -230,6 +232,8 @@ SevenSegBitmask
             dc.l    $01011011, $01011111, $01110000, $01111111, $01111011 
   
   ;END START
+
+
 
 
 

@@ -103,25 +103,24 @@ RestartScreen
         rts
 
 
-SortLeftRecycle
-  * if A is pressed, update graphics and indicate which bin the object was sorted into
+SortLeft  * if A is pressed, update graphics and indicate which bin the object was sorted into
         movem.l ALL_REG,-(sp)
         
-        move.l  #RECYCLE_BIN,chosenBin  
+        move.l  leftBin,chosenBin  
         movem.l (sp)+,ALL_REG
         rts
 
-SortRightTrash
+SortRight
         movem.l ALL_REG,-(sp) 
         
-        move.l  #TRASH_BIN,chosenBin
+        move.l  rightBin,chosenBin
         movem.l (sp)+,ALL_REG
         rts
 
-SortDownKeep
+SortDown
         movem.l ALL_REG,-(sp)   
 
-        move.l  #KEEP_BIN,chosenBin
+        move.l  downBin,chosenBin
         movem.l (sp)+,ALL_REG
         rts
         
@@ -129,53 +128,57 @@ SortDownKeep
         
 ObjMovement
         move.l      chosenBin,d0
-        cmp.l       #RECYCLE_BIN,d0
-        beq         RecycleBinMove
+        cmp.l       leftBin,d0
+        beq         LeftBinMove
         
-        cmp.l       #TRASH_BIN,d0
-        beq         TrashBinMove
+        cmp.l       rightBin,d0
+        beq         RightBinMove
         
-        cmp.l       #KEEP_BIN,d0
-        beq         KeepBinMove
+        cmp.l       downBin,d0
+        beq         DownBinMove
         
         rts
 
-RecycleBinMove
+LeftBinMove
         *check boundary
-        move.l      RandomObjPosX,d0
-        cmpi.l      #-50,d0
-        blt         BinMoveEnd
-        
+        jsr         ObjInval
         move.l      randomObjPosX,d0
         sub.l       velocity,d0
         move.l      d0,randomObjPosX
+        
+        cmpi.l      #0,d0
+        blt         BinMoveEnd
         rts
 
 
-TrashBinMove
+RightBinMove
   *check boundary
-        move.l      RandomObjPosX,d0    
-        cmpi.l      #600,d0
-        bgt         BinMoveEnd
         
+        jsr         ObjInval
         move.l      randomObjPosX,d0
         add.l       velocity,d0
         move.l      d0,randomObjPosX
+        
+        cmpi.l      #680,d0
+        bgt         BinMoveEnd
         rts
         
 
-KeepBinMove
+DownBinMove
           *check boundary
-        move.l      RandomObjPosY,d0
-        cmpi.l      #500,d0
-        bgt         BinMoveEnd
+
         
+        jsr         ObjInval
         move.l      randomObjPosY,d0
         add.l       velocity,d0
         move.l      d0,randomObjPosY
+
+        cmpi.l      #480,d0
+        bgt         BinMoveEnd
         rts
 
 BinMoveEnd
+        jsr         ChosenBinInval
         move.l      #1,objIsMoving
         rts 
 
@@ -188,9 +191,19 @@ objectPosX         ds.w    1
 objectPosY         ds.w    1
 functionTable   
                 *0-9
-                dc.l    SortLeftRecycle,0,0,SortRightTrash,0,0,0
+                dc.l    SortLeft,0,0,SortRight,0,0,0
                 dc.l    0,0,0,0,0,0,0
-                dc.l    0,0,0,0,SortDownKeep,0
+                dc.l    0,0,0,0,SortDown,0
+
+
+
+
+
+
+
+
+
+
 
 
 

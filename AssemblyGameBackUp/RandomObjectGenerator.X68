@@ -49,9 +49,47 @@ RandomObjGenerator
         move.b  d0,d7            ; Move result to d7
 
         rts
+RandomBinGenerator
+        jsr     RandomObjGenerator
+        move.l  d7,leftBin
+        
+        cmpi.l  #3,d7
+        beq     ZeroCondition
+        
+        move.l  #3,d0
+        sub.l   leftBin,d0
+        
+        move.l  d0,downBin
+        
+        add.l   leftBin,d0
+        move.l  d0,rightBin
+        rts
+        
+ZeroCondition
+        jsr     getRandomByteIntoD6
+        move.l  d6,d0            ; Move the random value to d0
+        andi.l  #$FF,d0          ; Ensure it is within byte range
+        divu    #2,d0            ; Divide by 2 to get remainder (0 or 1)
+        swap    d0
+        addq.l  #1,d0
+        move.b  d0,d7            ; Move result to d7
+        move.l  d7,downBin        ; set downBin equal to random value
 
+        move.l  #3,d0
+        sub.l   downBin,d0
+        
+        move.l  d0,rightBin        
+        rts
+        
+        
+        
+        
+        
 Variables
 RANDOMVAL       ds.l    1
+
+
+
 
 
 

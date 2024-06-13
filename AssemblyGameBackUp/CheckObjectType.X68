@@ -30,7 +30,7 @@ GoldCondition
     bne     WrongGoldBin
     
 CorrectGoldBin
-    add.l   #30,pointsToAdd
+    add.l   #20,pointsToAdd
     rts
 
 WrongGoldBin
@@ -38,7 +38,7 @@ WrongGoldBin
     cmpi.l  #40,d0
     blt     FinishGoldCondition
     
-    sub.l   #30,pointsToAdd
+    sub.l   #20,pointsToAdd
     rts
     
 RegularCondition
@@ -63,6 +63,7 @@ FinishGoldCondition
     move.l  #0,score
     rts
       
+
 
 
 

@@ -1,4 +1,4 @@
-*-----------------------------------------------------------
+ *-----------------------------------------------------------
 * Title      : Trash Sort
 * Written by : Haley Park
 * Date       :
@@ -14,19 +14,18 @@ DRAWING_MODE_COMMAND	equ	    92
 
 DISPLAY_STRING          EQU     95
 
+CONST_VELOCITY          EQU     12
+
 ENTER_GAMELOOP_INPUT    EQU     5
 
 PEN_COLOR_COMMAND       EQU     80
 FILL_COLOR_COMMAND      EQU     81
-BACKGROUND_COLOR        EQU     $009C6258
+BACKGROUND_COLOR        EQU     $00DCA399
 FLOOD_FILL_COMMAND      EQU     89
 DRAW_RECTANGLE          EQU     87
 
 GET_TIME_COMMAND        EQU     8
-
-RECYCLE_BIN             EQU     1    
-TRASH_BIN               EQU     3  
-KEEP_BIN                EQU     2 
+FRACTIONAL_BITS         EQU     2
 
     ORG    $1000
 START:                  ; first instruction of program
@@ -34,13 +33,19 @@ START:                  ; first instruction of program
 * Initialization
 **********************************************************************
 MainInitialize
-        
+        move.l      #0,chosenBin
         move.l      #0,score
+        move.l      #6000,time
         jsr         setScreenResolution  
       	
       	jsr         FillBackground
       	
       	jsr         DisplayEnterScreen
+      	
+      	jsr         RandomBinGenerator
+      	
+      	jsr         SoundInitialize
+      
         
         *set double buffered mode                   
       	move.b	    #DRAWING_MODE_COMMAND,d0
@@ -62,62 +67,106 @@ WaitForEnter
       	
 GameLoopInitialize
          jsr         SwapBuffers
+         jsr         PlayBackgroundMusic
+         jsr         RestartScreen
          jsr         DisplayBackground 
+         jsr         DisplayAllBins
          jsr         SwapBuffers  
-         ;jsr         GetTime
+         jsr         GetTime
       	
 **********************************************************************
 * GameLoop
 ********************************************************************** 
 GameLoop
-        move.l  randomObjPosX,invalPosX
-        move.l  randomObjPosY,invalPosY
         
         
-        move.l  #80,velocity 
+        jsr         FindDeltaTime ; finds time-based velocity
+
+
+       
+        jsr         CalcVelocity 
         
-        cmpi.l  #0,objIsMoving
-        beq     InputObjMovement
         
-        cmpi.l  #0,objDropped
-        beq     Input
+        
+        cmpi.l      #1,time
+        blt         GameOver
+        
+        move.l      randomObjPosX,invalPosX
+        move.l      randomObjPosY,invalPosY
+        
+        cmpi.l      #0,objIsMoving
+        beq         InputObjMovement
+        
+        cmpi.l      #0,objDropped
+        beq         Input
         
         * if obj is not at the center yet, keep updating its position and render it until it is
-        cmpi.l  #180,randomObjPosY
-        blt     Update
+        move.l      randomObjPosY,d0
+        cmp.l       objDropCenterPos,d0
+        beq         Input
+        
+        move.l      #200,d0
+        sub.l       randomObjPosY,d0
+        cmp.l       #200,d0
+        bgt         Update
+        
+        *last frame before obj reaches center
+*-----------------------------------------------------------------------------------------
+        * randomly generates new locations for bins every 10 seconds
+*        move.l      binMixCounter,d0
+*        divu.w      #10,d0
+*        swap        d0
+
+        move.l      score,d0
+        cmpi.w      #100,d0
+        bne         centerInval
+        
+        jsr         SwapBuffers
+         
+        jsr         RandomBinGenerator
+        jsr         PauseTimer
+        
+        
+CenterInval        
+        jsr         objInval
+        move.l      objDropCenterPos,randomObjPosY
+        bra         render
+        
 Input
+        
+        
         * record curr frame value for comparison in next frame
         lea         lastFrameKeyDown,a2
         move.l      currentFrameKeyDown,(a2)
     
-        move.l  #0,objDropped
-        move.l  #1,currentFrameKeyDown
+        move.l      #0,objDropped
+        move.l      #1,currentFrameKeyDown
         
-        jsr     InitData
-        jsr     CheckInput
-        bra     ObjDropComplete
+        jsr         InitData
+        jsr         CheckInput
+        bra         ObjDropComplete
     
 Update 
         * checks to see if obj has finished dropping
         cmpi.l      #0,objDropped
         beq         objDropComplete
-        
-        ;jsr         FindTimeBasedMovement ; finds time-based velocity
-        
+
+        jsr         objInval
         jsr         RandomObjDrop         ; updates position of  random obj dropped
         bra         Render
     
 ObjDropComplete
+
         
         * if there is an input, check to see if the previous frame also has input
         * otherwise, do not update and render
         cmpi.l      #0,currentFrameKeyDown
-        bne         GameLoop
+        bne         Render
         
         * compare the two frames: if last frame was not pressed, then process input
         move.l      lastFrameKeyDown,d0
         cmpi.l      #1,d0
-        bne         GameLoop
+        bne         Render
 *----------- KEY UP ----------------------------------
 InputObjMovement
         jsr         ObjMovement ; updates obj position based on player input
@@ -140,108 +189,137 @@ InputObjMovement
         move.l      #1,objDropped
         
         * reset obj position
-        move.l      #280,randomObjPosX
+        move.l      #290,randomObjPosX
         move.l      #-50,randomObjPosY
         
         
 Render  
-        
-        jsr         RestartScreen
-        
-        jsr         FillBackground
-        
-        
+        jsr         SevenSegInval
+        move.l      #70,-(sp)
+        move.l      #570,-(sp)
+        jsr         DisplayCountdownTimer
+        add.l       #8,sp
 
-        jsr         DisplayBinLabels
-        
+        move.l      #70,-(sp)
+        move.l      #159,-(sp)
         jsr         DisplayScore
+        add.l       #8,sp
         
-        jsr         ObjInval
         
         jsr         DisplayRandomObj
      
-        jsr         SwapBuffers     
-        
+        jsr         SwapBuffers   
+
         bra         GameLoop
-
-
+**********************************************************************
+* Game Over & final score  
+GameOver 
+        jsr         RestartScreen
+        jsr         FillBackground
+        
+        move.l      #240,-(sp)
+        move.l      #340,-(sp)
+        jsr         DisplayScore
+        add.l       #8,sp
+        
+        jsr         SwapBuffers
+        
+        SIMHALT
+**********************************************************************
 **********************************************************************
 * Subroutines
-**********************************************************************
-
-        
-ObjInval
+********************************************************************** 
+PauseTimer
         move.l      #PEN_COLOR_COMMAND,d0
-        move.l      #$009C6258,d1
+        move.l      #$00FFFFFF,d1
+        trap        #15
+        
+        move.l      #FILL_COLOR_COMMAND,d0
+        move.l      #$001616DC,d1
+        trap        #15
+        
+        move.l      #DRAW_RECTANGLE,d0
+        move.l      #192,d1
+        move.l      #184,d2
+        move.l      #456,d3
+        move.l      #313,d4
+        trap        #15
+        
+        move.l      #DISPLAY_STRING,d0
+        lea         warningString,a1
+        move.l      #281,d1
+        move.l      #220,d2
+        trap        #15
+        
+        move.l      #DISPLAY_STRING,d0
+        lea         workerString,a1
+        move.l      #200,d1
+        move.l      #235,d2
+        trap        #15
+        
+        
+        move.l      #PEN_COLOR_COMMAND,d0
+        move.l      #$001616DC,d1
         trap        #15
         
         move.l      #FILL_COLOR_COMMAND,d0
         trap        #15
         
         clr.l       d1
-
+        
+        jsr         SwapBuffers
+        
+        move.l      #PEN_COLOR_COMMAND,d0
+        move.l      #$009C6258,d1
+        trap        #15
+        
+        move.l      #FILL_COLOR_COMMAND,d0
+        move.l      #$009C6258,d1
+        trap        #15
+        
         move.l      #DRAW_RECTANGLE,d0
-        move.l      invalPosX,d1
-        move.l      invalPosY,d2
-        move.l      invalPosX,d3
-        add.l       invalWidth,d3
-        move.l      invalPosY,d4
-        add.l       invalHeight,d4
+        move.l      #100,d1
+        move.l      #150,d2
+        move.l      #470,d3
+        move.l      #350,d4
         trap        #15
-        rts
+       
+        jsr         DisplayBackground
+        jsr         DisplayAllBins
         
-DisplayBinLabels
-*recycle bin label
-        move.l      #DISPLAY_STRING,d0
-        move.w      #10,d1
-        move.w      #140,d2
-        lea         recycleString,a1
-        trap        #15
+        jsr         SwapBuffers
         
-*trash bin label
-        move.l      #DISPLAY_STRING,d0
-        move.w      #590,d1
-        move.w      #140,d2
-        lea         trashString,a1
-        trap        #15
-        
-*keep bin label
-        move.l      #DISPLAY_STRING,d0
-        move.w      #315,d1
-        move.w      #450,d2
-        lea         keepString,a1
-        trap        #15
-        
-        rts
-                 
+        add.l       #600,time
+
+        rts       
  
 ********** TIME-BASED MOVEMENT ****************************
-*FindTimeBasedMovement
-*        move.l      currentFrameTime,lastFrameTime
-*        jsr         GetTime
-*        jsr         CalcDeltaTime
-*        jsr         CalcVelocity 
-*        rts
-*        
-*GetTime
-*        move.l      #GET_TIME_COMMAND,d0
-*        trap        #15
-*        
-*        move.l      d1,currentFrameTime
-*        rts
-*        
-*CalcDeltaTime
-*        move.l       currentFrameTime,d0
-*        sub.l        lastFrameTime,d0
-*        move.w       d0,deltaTime
-*        rts
-*
-** calc for time-based movement       
-*CalcVelocity
-*        move.l      velocity,d0
-*        mulu.w      deltaTime,d0
-*        move.l      d0,velocity
-*        rts
+FindDeltaTime
+        move.l      currentFrameTime,lastFrameTime
+        jsr         GetTime
+        jsr         CalcDeltaTime
+        rts
+        
+GetTime
+        move.l      #GET_TIME_COMMAND,d0
+        trap        #15
+        
+        move.l      d1,currentFrameTime
+        rts
+        
+CalcDeltaTime
+        move.l       currentFrameTime,d0
+        sub.l        lastFrameTime,d0
+        move.l       d0,deltaTime
+        rts
+
+* calc for time-based movement       
+CalcVelocity
+        move.l      #CONST_VELOCITY,d0
+        move.l      deltaTime,d1
+        mulu.w      d1,d0
+        move.l      d0,velocity
+        rts
 ************************************************************       
 FillBackground
         move.l      #FILL_COLOR_COMMAND,d0
@@ -255,30 +333,20 @@ FillBackground
         rts
 
 RandomObjDrop
-        * change in position
-        
+        * change in position 
         move.l      randomObjPosY,d0
         add.l       velocity,d0
         move.l      d0,randomObjPosY
         rts
-        
-        
-     
-* Testing Purposes      
-DisplayRandomNum
-        * returns random value through d7
-        move.l      #DISPLAY_SCORE,d0
-        move.l      randomObjToSort,d1
-        move.b      #10,d2
-        trap        #15   
-        rts
-        
-        
+       
+************ SEVEN SEG DISPLAY ******************************
 DisplayScore
+        move.l      #0,numberToDisplay
         move.l      score,numberToDisplay
-        move.l      #159,centerX
-        move.l      #70,centerY
-        jsr         sevenSegDisplay   
+        
+        move.l      4(sp),centerX
+        move.l      8(sp),centerY
+        jsr         sevenSegDisplay 
         rts   
         
 CalcScore
@@ -286,9 +354,27 @@ CalcScore
         clr.l       d0
         move.l      score,d0
         add.l       pointsToAdd,d0
-        move.l       d0,score
+        move.l      d0,score
         move.l      #0,pointsToAdd
         rts
+        rts
+
+DisplayCountdownTimer
+        addq.l      #1,binMixCounter
+        move.l      time,d0
+        sub.l       deltaTime,d0
+        move.l      d0,time
+        divu.w      #100,d0
+        clr.l       d1
+        move.w      d0,d1
+        
+        move.l      d1,numberToDisplay
+        move.l      4(sp),centerX
+        move.l      8(sp),centerY
+        jsr         sevenSegDisplay   
+        rts  
+        
+************************************************************
 	    
 SwapBuffers
 	    move.b  #REPAINT_SCREEN_COMMAND,d0
@@ -298,13 +384,14 @@ SwapBuffers
     SIMHALT             ; halt simulator        
 * Put program code here
 
-
     INCLUDE             "Movement.X68"
     INCLUDE             "CheckObjectType.X68"
     INCLUDE             "BMP_32Bit_Subroutine.X68"
     INCLUDE             "RandomObjectGenerator.X68"
     INCLUDE             "DisplayRandomObject.X68"
     INCLUDE             "SevenSegSubroutine.X68"
+    INCLUDE             "InvalSubroutines.X68"
+    INCLUDE             "SoundManager.X68"
     
 LastFrameKeyDown    dc.l    1
 CurrentFrameKeyDown ds.l    1
@@ -312,7 +399,13 @@ LastFrameTime       ds.l    1
 CurrentFrameTime    ds.l    1
 deltaTime           ds.l    1
 
-randomObjPosX       dc.l    280
+leftBin             dc.l    3 ; number corresponds with the obj to sort (1: recycle, 2: Gold, 3: trash) 
+rightBin            dc.l    1
+downBin             dc.l    2
+
+objDropCenterPos    dc.l    200
+
+randomObjPosX       dc.l    290
 randomObjPosY       dc.l    -50  
 
 invalPosX           dc.l    280
@@ -320,7 +413,10 @@ invalPosY           dc.l    -50
 invalHeight         ds.l    1
 invalWidth          ds.l    1
 
-velocity            dc.l    80
+velocity            dc.l    1
+time                dc.l    6000
+
+binMixCounter       dc.l    0
     
 screenHeight        dc.w    480
 screenWidth         dc.w    680
@@ -336,46 +432,24 @@ centerY             dc.l    0
 
 objDropped          dc.l    1
 objIsMoving         dc.l    1
+
 randomObjToSort     dc.l    1
+randomObjToSort2    dc.l    1
+
 pointsToAdd         dc.l    0
 
 
 CR                  EQU     $0D
 LF                  EQU     $0A
 
-scoreString         dc.b    '$',0
-
-recycleString       dc.b    'RECYCLE BIN',CR,LF,0
+warningString       dc.b    'WARNING:',CR,LF,0
+workerString        dc.b    'WORKERS ARE SWITCHING ',CR,LF,0 
+                    dc.b    'THE SORTING BINS',CR,LF,0
                     
-trashString         dc.b    'TRASH BIN',CR,LF,0
-                    
-keepString          dc.b    'KEEP',CR,LF,0
 
 
 
     END    START        ; last line of source
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
